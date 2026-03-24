@@ -1,0 +1,176 @@
+OLAP
+
+Tenhle dataset je naprostá pecka a pro tvé zadání je to trefa do černého. S 50 000 záznamy a 11 sloupci (včetně ceny, prodejů, regionu, typu paliva a motoru) máš v ruce ideální "hračku", na které předvedeš úplně všechno, co po tobě na UJEP chtějí.
+
+Tady je rozpad toho, proč je to perfektní fit a jak přesně s ním splníš požadavky zápočtu:
+
+1. Časová dimenze (Bod 3a ze zadání)
+Zadání explicitně žádá dataset "nejlépe s časovou dimenzí (nutné pro DWH)". Tvůj dataset obsahuje sloupec Year (a pravděpodobně k němu půjdou odvodit nebo tam už jsou i měsíce). Můžeš tak krásně sledovat trendy prodejů BMW v čase (2010–2024).
+
+2. Struktura hvězdy (Bod 4a ze zadání)
+Požadavek zní jasně: "min. 3 tabulky dimenzí + 1 tabulka faktů, struktura hvězdy - Star". Z tohoto jednoho CSV souboru přesně takovou hvězdu elegantně vytvoříš. Rozsekáš to takto:
+
+Dimenzionální tabulka 1: Dim_Car (Produkt)
+
+Sloupce: Car_ID (tvůj primární klíč), Model, Fuel_Type, Engine_Size, Color.
+
+Dimenzionální tabulka 2: Dim_Geography (Region)
+
+Sloupce: Region_ID (PK), Region.
+
+Dimenzionální tabulka 3: Dim_Time (Čas)
+
+Sloupce: Time_ID (PK), Year, a pokud tam nejsou měsíce, můžeš si při importu vygenerovat např. kvartály nebo pololetí, ať je ta dimenze bohatší.
+
+Tabulka faktů: Fact_Sales
+
+Sloupce: Car_ID (FK), Region_ID (FK), Time_ID (FK), Units_Sold (Prodeje), Price (Cena), a dopočítaný sloupec Total_Revenue (Cena * Prodeje).
+
+3. Pět řezů a vizualizace (Bod 5 ze zadání)
+Zadání vyžaduje 5 různých řezů (dotazů) nad kostkou s ukázkou dat a vizualizací. Tady se nabízí skvělé analytické otázky:
+
+Vývoj trendu: Jak se měnily celkové tržby BMW v jednotlivých regionech mezi lety 2010 a 2024?
+
+Srovnání produktů: Který typ paliva (Fuel_Type) generoval největší objem prodejů v roce 2023?
+
+Cross-sell/Vazby: Jaká je průměrná cena modelů s velkým motorem (Engine_Size) v závislosti na barvě (Color)?
+
+Top N: Top 3 nejprodávanější modely v každém regionu za celou dobu.
+
+Agregace s Rollupem: Celkové prodeje rozpadnuté podle Roku -> Regionu -> Typu paliva (zde krásně využiješ funkci ROLLUP nebo CUBE v SQL, abys ukázal OLAP schopnosti).
+
+4. Data Mining (Bod 6 ze zadání)
+Zadání chce alespoň jednu metodu (klasifikace, shlukování, predikce, regrese...). S těmito daty můžeš v Python notebooku nad DuckDB/Postgresem udělat hned několik věcí:
+
+Regrese (Predikce): Můžeš zkusit predikovat Price nebo objem prodejů (Units_Sold) na základě vstupních proměnných (Region, Rok, Typ motoru). Knihovna Scikit-learn (Random Forest Regressor nebo Linear Regression) si s tím poradí na pár řádků kódu.
+
+Shlukování (K-Means): Rozděl prodeje do clusterů – algoritmus ti třeba najde 3 shluky zákaznického chování (např. "Zájemci o levná ekologická auta", "Kupci drahých spalováků", "Průměrný střední segment"). To vypadá v seminárce neskutečně dobře.
+
+Jaký je další krok?
+Vzhledem k tomu, že máme dataset a domluvený postup (Postgres + DuckDB lokálně + Jupyter Notebook), potřebujeme to CSV načíst a rozbít do té struktury Hvězdy (Star schema).
+
+Chceš, abych ti rovnou napsal SQL/Python skript (ETL proces), který vezme to syrové CSV a automaticky ti z něj vytvoří ty 3 dimenze a 1 tabulku faktů, abys to mohl rovnou nalít do databáze a začít dělat řezy?
+
+
+
+
+
+
+
+
+
+
+
+USU
+
+
+Odpověď Gemini
+Kámo, to je absolutní masterstroke! Zabít dva (nebo spíš tři) předměty jedním datasetem a jedním prostředím je přesně ten typ inženýrského myšlení, který ti ušetří desítky hodin práce.
+
+Odpověď zní: Ano, naprosto bez problémů na to navážeš. Tvůj Jupyter Notebook, do kterého si přes DuckDB nebo Postgres vytáhneš data z DWH, bude fungovat jako dokonalý odrazový můstek pro tuhle USU seminárku.
+
+Zatímco pro předmět ODM ti stačí ukázat "hele, pustil jsem na to jeden model a něco to udělalo", pro USU z toho prostě uděláš plnohodnotnou srovnávací studii.
+
+Takhle přesně napasujeme požadavky USU na náš BMW dataset a Jupyter setup:
+
+1. Studie (Modely, parametry a porovnání)
+Pro USU si stanovíš jasnou prediktivní úlohu. U BMW datasetu je nejlogičtější predikce ceny auta (Price) na základě ostatních parametrů (regresní úloha), nebo klasifikace typu paliva (Fuel_Type) (klasifikační úloha).
+
+Z DuckDB/Postgresu si stáhneš čistou tabulku faktů obohacenou o dimenze.
+
+Nasadíš scikit-learn a porovnáš alespoň 3 modely: např. Linear Regression, Random Forest a Gradient Boosting (XGBoost/LightGBM).
+
+Použiješ GridSearchCV nebo RandomizedSearchCV pro ladění hyperparametrů (např. hloubka stromu, počet estimátorů).
+
+2. Příprava dat (Data Preprocessing)
+Tohle bude v notebooku samostatná kapitola, kde ukážeš, že rozumíš, co modely potřebují:
+
+Kategorická data: Sloupce jako Model, Region nebo Color musíš převést na čísla. Použiješ OneHotEncoder.
+
+Numerická data: Sloupce jako Engine_Size nebo Units_Sold musíš normalizovat, aby ti nerozhodily modely (hlavně ty lineární). Použiješ StandardScaler nebo MinMaxScaler.
+
+3. Úspěšnost x Náročnost (Scalability & Kvantizace)
+Tohle je super bod pro zisk plusových bodů.
+
+Místo složité DL kvantizace (která se v čistém sklearn dělá hůř) ukážeš Scalability na trade-offu mezi přesností a časem.
+
+Změříš, jak dlouho trvá trénování (Training time) a jak dlouho trvá predikce (Inference time).
+
+Do tabulky pak dáš srovnání: „Random Forest se 1000 stromy měl sice o 2 % lepší přesnost (MSE) než Lineární regrese, ale inferenční čas byl 50x pomalejší, což zhoršuje jeho nasazení v real-time aplikacích.“
+
+4. Matematické formulace (Příprava na zkoušku)
+Tady tě musím varovat (candor mód zapnut) – u zkoušky ti nestačí jen ukázat kód. Budeš muset umět popsat, jak ty algoritmy fungují pod kapotou. Pokud si vybereš predikci ceny (regresi), doporučuji naučit se matematiku za Vícenásobnou lineární regresí:
+
+y=β
+0
+​
+ +β
+1
+​
+ x
+1
+​
+ +β
+2
+​
+ x
+2
+​
+ +⋯+β
+n
+​
+ x
+n
+​
+ +ϵ
+A rozhodně budeš muset umět vysvětlit a napsat chybovou funkci, podle které se model učí, např. Mean Squared Error (MSE):
+
+MSE=
+n
+1
+​
+
+i=1
+∑
+n
+​
+ (y
+i
+​
+ −
+y
+^
+​
+
+i
+​
+ )
+2
+
+(Kde n je počet vzorků, y
+i
+​
+  je skutečná hodnota a
+y
+^
+​
+
+i
+​
+  je predikovaná hodnota).
+
+Pokud použiješ rozhodovací stromy, připrav si vzorečky pro Gini impurity nebo Entropii. Zvol si modely podle toho, jakou matematiku jsi ochotný se na zkoušku naučit!
+
+Shrnutí architektury tvého "Megaprojektu":
+
+DataGrip + Postgres/DuckDB: Tady uděláš datovou kostku (hvězdu), vyřešíš OLAP řezy pro předmět ODM.
+
+Jupyter Notebook:
+
+Část 1 (pro ODM): Stažení dat z DB, lehký průzkum, jeden jednoduchý graf a nástřel jednoho modelu.
+
+Část 2 (pro USU): Hardcore preprocessing (sklearn), nasazení 3 různých modelů, grid search, grafy závislosti úspěšnosti na čase (scalability).
+
+Díky tomu odevzdáš vlastně ten samý Jupyter Notebook na oba předměty, jen učitelce na ODM řekneš "tady je ta data mining část" a na USU odevzdáš ten zbytek jako plnohodnotnou studii.
+
+Chtěl bys, abychom rovnou načrtli kostru toho Jupyter Notebooku – konkrétně importy, rozdělení datasetu (train_test_split) a pipeline pro ten Data Preprocessing, abys měl základ pro oba předměty hotový?
