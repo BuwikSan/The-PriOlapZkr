@@ -1,0 +1,185 @@
+-- ============================================================================
+-- DUCKDB OLAP SNOWFLAKE SCHÉMA S CUBE/ROLLUP
+-- ============================================================================
+-- 1. Dimenze Model (24 modelů)
+CREATE SEQUENCE seq_model_id START 1;
+
+CREATE TABLE Dim_Model AS
+SELECT
+    nextval('seq_model_id') AS model_id,
+    model
+FROM
+    (
+        SELECT DISTINCT
+            model
+        FROM
+            read_csv_auto('bmw.csv')
+    ) t
+ORDER BY
+    model;
+
+-- 2. Dimenze Time (25 roků: 1996-2020)
+CREATE SEQUENCE seq_time_id START 1;
+
+CREATE TABLE Dim_Time AS
+SELECT
+    nextval('seq_time_id') AS time_id,
+    year,
+    CAST(FLOOR(year / 10.0) * 10 AS BIGINT) AS decade
+FROM
+    (
+        SELECT DISTINCT
+            year
+        FROM
+            read_csv_auto('bmw.csv')
+    ) t
+ORDER BY
+    year;
+
+-- 3. Dimenze Version (933 uniq kombinací: model + year + engineSize + fuelType + transmission)
+CREATE SEQUENCE seq_version_id START 1;
+
+CREATE TABLE Dim_Version AS
+SELECT
+    nextval('seq_version_id') AS version_id,
+    m.model_id,
+    t.time_id,
+    v.engineSize,
+    v.fuelType,
+    v.transmission
+FROM
+    (
+        SELECT DISTINCT
+            model,
+            year,
+            engineSize,
+            fuelType,
+            transmission
+        FROM
+            read_csv_auto('bmw.csv')
+    ) v
+    JOIN Dim_Model m ON v.model = m.model
+    JOIN Dim_Time t ON v.year = t.year
+ORDER BY
+    m.model_id,
+    t.time_id;
+
+-- 4. Faktová tabulka (10781 prodejů)
+CREATE SEQUENCE seq_sale_id START 1;
+
+CREATE TABLE Fact_Sales AS
+SELECT
+    nextval('seq_sale_id') AS sale_id,
+    v.version_id,
+    s.price,
+    s.tax,
+    s.mileage,
+    s.mpg
+FROM
+    read_csv_auto('bmw.csv') s
+    JOIN Dim_Model m ON s.model = m.model
+    JOIN Dim_Time t ON s.year = t.year
+    JOIN Dim_Version v ON v.model_id = m.model_id
+    AND v.time_id = t.time_id
+    AND v.engineSize = s.engineSize
+    AND v.fuelType = s.fuelType
+    AND v.transmission = s.transmission;
+
+-- ============================================================================
+-- DUCKDB OLAP AGREGACE (CUBE/ROLLUP)
+-- ============================================================================
+-- 1. CUBE - Všechny kombinace dimenzí
+CREATE TABLE olap_cube_5d AS
+SELECT
+    m.model,
+    t.year,
+    t.decade,
+    v.engineSize,
+    v.fuelType,
+    v.transmission,
+    COUNT(*) AS sales_count,
+    AVG(f.price) AS avg_price,
+    MIN(f.price) AS min_price,
+    MAX(f.price) AS max_price,
+    SUM(f.price) AS total_price,
+    AVG(f.mileage) AS avg_mileage,
+    AVG(f.mpg) AS avg_mpg,
+    AVG(f.tax) AS avg_tax
+FROM
+    Fact_Sales f
+    JOIN Dim_Version v ON f.version_id = v.version_id
+    JOIN Dim_Model m ON v.model_id = m.model_id
+    JOIN Dim_Time t ON v.time_id = t.time_id
+GROUP BY
+    CUBE (
+        m.model,
+        t.year,
+        v.engineSize,
+        v.fuelType,
+        v.transmission
+    )
+ORDER BY
+    m.model,
+    t.year,
+    v.engineSize,
+    v.fuelType,
+    v.transmission;
+
+-- 2. ROLLUP - Hierarchická agregace
+CREATE TABLE olap_rollup_hierarchy AS
+SELECT
+    m.model,
+    t.year,
+    v.engineSize,
+    v.fuelType,
+    v.transmission,
+    COUNT(*) AS sales_count,
+    AVG(f.price) AS avg_price,
+    MIN(f.price) AS min_price,
+    MAX(f.price) AS max_price,
+    SUM(f.price) AS total_price,
+    AVG(f.mileage) AS avg_mileage,
+    AVG(f.mpg) AS avg_mpg
+FROM
+    Fact_Sales f
+    JOIN Dim_Version v ON f.version_id = v.version_id
+    JOIN Dim_Model m ON v.model_id = m.model_id
+    JOIN Dim_Time t ON v.time_id = t.time_id
+GROUP BY
+    ROLLUP (
+        m.model,
+        t.year,
+        v.engineSize,
+        v.fuelType,
+        v.transmission
+    )
+ORDER BY
+    m.model,
+    t.year,
+    v.engineSize,
+    v.fuelType,
+    v.transmission;
+
+-- 3. Time Hierarchy: Model → Decade → Year
+CREATE TABLE olap_time_hierarchy AS
+SELECT
+    m.model,
+    t.decade,
+    t.year,
+    COUNT(*) AS sales_count,
+    AVG(f.price) AS avg_price,
+    MIN(f.price) AS min_price,
+    MAX(f.price) AS max_price
+FROM
+    Fact_Sales f
+    JOIN Dim_Version v ON f.version_id = v.version_id
+    JOIN Dim_Model m ON v.model_id = m.model_id
+    JOIN Dim_Time t ON v.time_id = t.time_id
+GROUP BY
+    ROLLUP (m.model, t.decade, t.year)
+ORDER BY
+    m.model,
+    t.decade DESC,
+    t.year DESC;
+
+-- Hotovo! OLAP kostka je připravena.
