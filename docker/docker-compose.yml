@@ -1,0 +1,19 @@
+services:
+  web:
+    build: .
+    container_name: bmw_analytics_web
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - ./www:/var/www/html
+      - ./db:/var/www/html/db
+    environment:
+      - TZ=Europe/Prague
+
+  # Cloudflare Tunnel (přidej, až budeš na serveru)
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: cf_tunnel
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token <TVŮJ_TOKEN>

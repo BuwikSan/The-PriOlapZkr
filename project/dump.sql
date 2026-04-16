@@ -24,7 +24,7 @@ COPY staging_bmw (
     engineSize
 )
 FROM
-    '/path/to/bmw.csv'
+    'C:\GitHub\OLAP-a-DM\project\bmw.csv'
 WITH
     (FORMAT csv, HEADER TRUE, DELIMITER ',');
 
@@ -148,11 +148,10 @@ DROP TABLE staging_bmw;
 -- ============================================================================
 -- 1. CUBE - Všechny kombinace dimenzí (model, year, engineSize, fuelType, transmission)
 -- Vytvoří SUBTOTÁLY pro každou kombinaci včetně GRAND TOTAL
-CREATE MATERIALIZED VIEW olap_cube_5d AS
+CREATE TABLE olap_cube_5d AS
 SELECT
     m.model,
     t.year,
-    t.decade,
     v.engineSize,
     v.fuelType,
     v.transmission,
@@ -170,13 +169,11 @@ FROM
     JOIN Dim_Model m ON v.model_id = m.model_id
     JOIN Dim_Time t ON v.time_id = t.time_id
 GROUP BY
-    CUBE (
-        m.model,
-        t.year,
-        v.engineSize,
-        v.fuelType,
-        v.transmission
-    )
+    m.model,
+    t.year,
+    v.engineSize,
+    v.fuelType,
+    v.transmission
 ORDER BY
     m.model,
     t.year,
@@ -188,7 +185,7 @@ CREATE INDEX idx_olap_cube_5d ON olap_cube_5d (model, year, engineSize, fuelType
 
 -- 2. ROLLUP - Hierarchická agregace (model → year → engineSize → fuelType → transmission)
 -- Vytvoří agregace na každé úrovni hierarchie
-CREATE MATERIALIZED VIEW olap_rollup_hierarchy AS
+CREATE TABLE olap_rollup_hierarchy AS
 SELECT
     m.model,
     t.year,
@@ -201,7 +198,8 @@ SELECT
     MAX(f.price) AS max_price,
     SUM(f.price) AS total_price,
     AVG(f.mileage) AS avg_mileage,
-    AVG(f.mpg) AS avg_mpg
+    AVG(f.mpg) AS avg_mpg,
+    AVG(f.tax) AS avg_tax
 FROM
     Fact_Sales f
     JOIN Dim_Version v ON f.version_id = v.version_id
@@ -242,7 +240,9 @@ FROM
     JOIN Dim_Model m ON v.model_id = m.model_id
     JOIN Dim_Time t ON v.time_id = t.time_id
 GROUP BY
-    ROLLUP (m.model, t.decade, t.year)
+    m.model,
+    t.decade,
+    t.year
 ORDER BY
     m.model,
     t.decade DESC,
@@ -271,15 +271,14 @@ CREATE INDEX idx_olap_time ON olap_time_hierarchy (model, decade, year);
 -- ORDER BY avg_price DESC LIMIT 10;
 -- DRILL DOWN: Od agregace (jen modely) až k detailu (vše)
 -- Level 1: Průměr po modelech
--- SELECT model, AVG(avg_price) as model_avg_price FROM olap_cube_5d
+-- SELECT model, AVG(avg_price) as model_avg_price
+-- FROM olap_cube_5d
 -- WHERE model IS NOT NULL GROUP BY model ORDER BY model;
---
 -- Level 2: Průměr po modelech a rocích
 -- SELECT model, year, AVG(avg_price) as year_avg_price
 -- FROM olap_cube_5d
 -- WHERE model IS NOT NULL AND year IS NOT NULL
 -- GROUP BY model, year ORDER BY model, year;
---
 -- Level 3: Detail - vše včetně engineSize
 -- SELECT model, year, engineSize, avg_price, sales_count
 -- FROM olap_cube_5d
