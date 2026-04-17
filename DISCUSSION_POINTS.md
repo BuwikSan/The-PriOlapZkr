@@ -77,57 +77,79 @@ This file tracks topics that need deeper discussion in future sessions.
 
 ## 3. Authentication System Details
 
-**✅ DECIDED: Educational Demo Only (No Real Login System)**
+**✅ DECIDED: Educational Hash Demo (Lightweight)**
 
-**Why This Approach**:
-- Simpler codebase (you can explain every line to your lecturer)
-- Fulfills Cryptology class requirement (demonstrate hashing)
-- Avoids unnecessary complexity
-- Focuses on learning, not production features
+**Approach**: 
+- NOT full session-based system (too much work)
+- Educational demonstration of password hashing + verification
+- Lightweight database to store credentials (username + hash fingerprint)
+- Single HTML form: enter username + password, show verification result
 
-**New Subpage**: `crypto_hashing.php` (under Cryptography section)
+**How It Works**:
+1. User enters username + password in form
+2. System checks if username exists in lightweight DB
+3. If exists, hash the entered password and compare with stored hash
+4. Display: "Login successful" or "Invalid credentials"
+5. Show the hashing process (plaintext → hash → comparison)
 
-**Demonstrates**:
-1. **Password hashing workflow**:
-   - User enters password
-   - System generates hash (bcrypt/Argon2)
-   - Shows hash output
-   - Shows comparison process
+**Database** (Lightweight):
+- Use SQLite (file-based, simple) or DuckDB credential table
+- Table: `credentials (username, password_hash)`
+- Pre-populate with test users (e.g., "user1" / "password123")
 
-2. **Why hashing matters**:
-   - One-way function (can't reverse)
-   - Salt prevents rainbow tables
-   - Time cost prevents brute force
+**Files**:
+- `www/login.php` - Form + demonstration
+- `www/includes/auth_demo.php` - Hash verification functions
+- `project/credentials.db` or `project/credentials.sql` - Test data
 
-3. **Code qualities**:
-   - Simple: ~10-15 lines per function
-   - Well-commented: Every line explained
-   - No frameworks or helpers
-   - Demonstrable to examiner line-by-line
-
-**Example Code**:
+**Code Example**:
 ```php
-function hash_password($password) {
-    // Generate hash using bcrypt algorithm with cost 12
-    return password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
+// www/includes/auth_demo.php
+function verify_login($username, $entered_password) {
+    // Get stored hash from DB
+    $stored_hash = get_password_hash_from_db($username);
+    
+    if (!$stored_hash) {
+        return "User not found";
+    }
+    
+    // Verify password
+    if (password_verify($entered_password, $stored_hash)) {
+        return "Login successful!";
+    } else {
+        return "Invalid password";
+    }
 }
 
-function verify_password($password, $hash) {
-    // Compare plaintext password with stored hash
-    return password_verify($password, $hash);
+// www/login.php
+if ($_POST) {
+    $username = $_POST['username'];
+    $password = $_POST['password'];
+    $result = verify_login($username, $password);
+    echo "Result: " . $result;
 }
+?>
+<form method="POST">
+    <input type="text" name="username" placeholder="Username">
+    <input type="password" name="password" placeholder="Password">
+    <button>Verify Login</button>
+</form>
 ```
 
-**Website Access**: 
-- No login required
-- All pages publicly accessible
-- Demo page shows hashing examples (interactive)
+**Requirement Met**:
+- ✅ Form for data input (username + password)
+- ✅ Database storage (credentials table)
+- ✅ Read/filter/display (query DB, show result)
+- ✅ Explainable code (simple hashing demo)
+- ✅ Educational value (Cryptology class - demonstrates hashing security)
 
-**Files to create**:
-- `www/crypto_hashing.php` - Demo UI and explanation
-- `www/includes/hashing_helpers.php` - Simple hashing functions (max 20 lines)
+**NOT Included**:
+- ❌ Session handling (not needed)
+- ❌ Protected pages (all pages publicly accessible)
+- ❌ Logout functionality
+- ❌ Registration form (pre-populated DB only)
 
-**Session**: ✅ Completed (Planning Session 1)
+**Session**: ✅ Completed (Planning Session 1, Simplified)
 
 ---
 
@@ -447,28 +469,37 @@ pytest project/ -v
 
 ## Session Checklist
 
-**Completed (Planning Session 1) - 11 of 12 Points**:
+**Completed (Planning Session 1) - SIMPLIFIED**:
 - ✅ Hardware specs confirmed
 - ✅ Component architecture decided
 - ✅ Tech stack finalized
+- ✅ **Linux Distro**: Debian 12 (minimal netinstall)
 - ✅ SSL/HTTPS Strategy: Cloudflare (production) + HTTP localhost (dev)
 - ✅ Kyber Language: Python
-- ✅ Authentication: Educational demo (no real login, hashing subpage)
+- ✅ **Authentication: Educational Demo** (hash verification form, lightweight DB)
 - ✅ OLAP Query Specification: 9 queries (SLICE, DICE, DRILL-DOWN)
-- ✅ Data Pipeline: One-time load, read-only, no validation
+- ✅ Data Pipeline: One-time load, read-only
 - ✅ Performance & Resources: Single user, no limits, equal DBs
 - ✅ Input Constraints: Column selection toggles, dynamic queries
 - ✅ Code Documentation: Comments + docstrings + READMEs + API docs + config
 - ✅ Testing: Unit tests now (pytest), rest later
-- ✅ Development plan created
+- ✅ Development plan updated
 
-**Still Open**:
+**Requirement Compliance**:
+- ✅ Multiple pages (3+): login, dashboard, olap, crypto, ml
+- ✅ Navigation between pages
+- ✅ HTML form for data input: hash verification form (username + password)
+- ✅ Store/read data from database: credentials table
+- ✅ Display data: verification result (success/failure)
+- ✅ Simple, explainable code (no sessions/complex auth)
+
+**Remaining**:
 - [ ] **Point 5 (Crypto UI/UX)**: Hill cipher, Kyber, hashing demo interfaces
-- [ ] **Point 6 (ML Placeholder)**: Blank page, nothing else needed
-- [ ] **Point 10 (Cloudflare)**: Tutorial after server setup
+- [ ] **Point 6 (ML Placeholder)**: Just a blank "Coming soon" page
+- [ ] **Point 10 (Cloudflare Setup)**: Tutorial after server setup
 
 **Upcoming Sessions**:
-- [ ] **Key Component 1**: OLAP & Data Mining (Finalize schema, test queries)
-- [ ] **Key Component 2**: Cryptography (Hill Cipher, Kyber, Hashing demo interfaces)
-- [ ] **Implementation Session**: Docker setup, PHP pages, Integration, Unit tests
+- [ ] **Key Component 1**: OLAP & Data Mining (Schema, test queries)
+- [ ] **Key Component 2**: Cryptography (Hill Cipher, Kyber, Hashing demo)
+- [ ] **Implementation Session**: Docker setup, PHP pages, login demo, integration, unit tests
 - [ ] (Optional) **Key Component 3**: Machine Learning expansion
