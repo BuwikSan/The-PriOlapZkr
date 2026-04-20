@@ -1,0 +1,1 @@
+ssh -i $env:USERPROFILE\.ssh\id_ed25519 burymuru@192.168.50.144
