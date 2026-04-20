@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   web:
     build: .
@@ -8,12 +10,57 @@ services:
     volumes:
       - ./www:/var/www/html
       - ./db:/var/www/html/db
+      - ./src:/var/www/src
     environment:
       - TZ=Europe/Prague
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=bmw_olap
+      - DB_USER=bmw_user
+      - DB_PASS=bmw_password
+      - DUCKDB_PATH=/var/www/db/olap.duckdb
+      - CREDENTIALS_DB=/var/www/db/credentials.duckdb
+    depends_on:
+      - postgres
+    networks:
+      - bmw_network
 
-  # Cloudflare Tunnel (přidej, až budeš na serveru)
-  tunnel:
-    image: cloudflare/cloudflared:latest
-    container_name: cf_tunnel
+  postgres:
+    image: postgres:15-alpine
+    container_name: bmw_postgres_db
     restart: unless-stopped
-    command: tunnel --no-autoupdate run --token <TVŮJ_TOKEN>
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: bmw_olap
+      POSTGRES_USER: bmw_user
+      POSTGRES_PASSWORD: bmw_password
+      TZ: Europe/Prague
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - bmw_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bmw_user -d bmw_olap"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # DuckDB service (optional - can also use file-based in web container)
+  # Keeping file-based for simplicity - shared volume via web container
+
+  # Cloudflare Tunnel (add when on server)
+  # tunnel:
+  #   image: cloudflare/cloudflared:latest
+  #   container_name: cf_tunnel
+  #   restart: unless-stopped
+  #   command: tunnel --no-autoupdate run --token <YOUR_TOKEN>
+  #   networks:
+  #     - bmw_network
+
+volumes:
+  postgres_data:
+
+networks:
+  bmw_network:
+    driver: bridge
