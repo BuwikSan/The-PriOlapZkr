@@ -1,0 +1,89 @@
+Požadavky k zápočtu z předmětu KI/ODM a KI/KODM (OLAP a Data mining):
+1) Vyzkoušet některý z nástrojů DWH (data warehouse), DL (data lake), DLH (data lakehouse)
+https://en.wikipedia.org/wiki/Comparison_of_OLAP_servers
+
+https://www.gooddata.com/blog/data-warehouse-data-lake-and-analytics-lake-a-
+detailed-comparison/
+
+https://www.sprinkledata.com/blogs/10-best-data-lake-tools-2023
+2) Nainstalovat si zvolený DBMS + analytický nástroj OLAP, nebo zajistit si přístup ke
+cloudové službě OLAP (trial verze zdarma).
+3) Vybrat si vhodnou datovou sadu pro implementaci
+a) nejlépe s časovou dimenzí (nutné pro DWH)
+b) je možné využít vzorovou databázi zvoleného DBMS
+c) https://www.kaggle.com/datasets
+d) https://datasetsearch.research.google.com/
+e) a další ...
+4) Ze získaných dat vytvořit jednu datovou strukturu (vhodnou k vizualizaci dat).
+a) DWH - zvolit si vhodnou strukturu datové kostky (min. 3 tabulky dimenzí + 1 tabulka
+faktů, struktura hvězdy - Star, nebo sněhové vločky - Snowflake)
+b) DL – rozdělit data do zón (Raw zone, Cleansed zone, Transformed zone)
+5) Vytvořit alespoň 5 různých řezů (dotazů) nad datovou strukturou a připravit si je s sebou
+k zápočtu (v seminární práci u každého řezu => popis co má dotaz dělat + samotný dotaz +
+část výsledné tabulky s daty + vizualizace pomocí grafu).
+6) Vyzkoušet alespoň 1 metodu data miningu (klasifikace, shlukování, predikce, regrese,
+asociační pravidla, text mining) podle povahy získaných dat (pokud to použitý DBMS
+umožňuje). V případě, že zvolený databázový systém neumožňuje datamining, přidat
+alespoň 2 další dotazy (k bodu 5) využívající složitější statistické metody.
+Kroky 2) až 6) popsat v seminární práci a tento popis vhodně doplnit obrázky, které ukazují
+jednotlivé kroky.
+Práci pojmenovat ODM26_PrijmeniJmeno.pdf (v případě předmětu KI/KODM práci
+pojmenovat KODM26_PrijmeniJmeno.pdf) a poslat na email kvetuse.sykorova@ujep.cz
+alespoň 24 hodin před vaší obhajobou zápočtové práce.
+Termín pro odevzdání: nejpozději do 30. 6.
+Zápočet (prezenční / online) proběhne formou prezentace výsledků úkolů 1-6 v zápočtovém
+termínu (pochlubit se, co všechno se vám povedlo zrealizovat nad vámi vybraným OLAP
+systémem a nad vybranými daty) – délka cca 10-20 minut.
+Nezapomeňte na konec vaší trial verze systému !!!
+
+Předmět KI/ODM a KI/KODM
+
+© Mgr. Květuše Sýkorová
+Součástí dokumentu musí být:
+Úvodní stránka:
+- název univerzity, fakulty, katedry,
+- název práce např. "OLAP a DB2", "OLAP a IcCube" apod.,
+- rok vytvoření práce,
+- jméno a příjmení studenta,
+- studijní obor a studijní program
+Poslední stránka:
+- seznam použitých zdrojů dle normy ISO 690 [číslo] (citace.com a další)
+Odkazy na elektronické zdroje (dataset, web pro download) v textu nebo v poznámce pod
+čarou (stačí jen https://...)
+Příklady DWH, DL, DLH:
+ MS SQL Server (Visual studio + SQL Server Management Studio),
+ Olap Cube Writer,
+ DB2 (trial),
+ CubeJSServer,
+ Mondrian,
+ IcCube,
+ Apache Hadoop + Map Reduce / Apache Spark / Apache Hive / Apache Pinot,
+ Azure Data Lake,
+ AWS Data Lake,
+ Snowflake,
+ Google Cloude Platform,
+ Databricks Delta Lake,
+ Starburst,
+ BigQuery,
+ ClickHouse,
+ StarRocks,
+ DuckDB,
+ a další ...
+ tento seznam je směrem dolů postupně každý rok doplňován o nové !!!
+
+více např.:
+https://www.wikiwand.com/en/Comparison_of_OLAP_servers
+
+https://docs.microsoft.com/en-us/sql/mdx/multidimensional-expressions-mdx-
+reference?view=sql-server-ver15
+
+https://www.sqlservercentral.com/articles/mdx-multidimensional-expressions-in-148-minutes
+https://www.ibm.com/support/knowledgecenter/SSEPGG_10.5.0/com.ibm.dwe.navigate.doc
+/welcome_warehouse.html
+
+https://www.gooddata.com/blog/data-warehouse-data-lake-and-analytics-lake-a-detailed-
+comparison/
+
+https://www.sprinkledata.com/blogs/10-best-data-lake-tools-2023
+https://en.wikipedia.org/wiki/Data_lake
+a další ...

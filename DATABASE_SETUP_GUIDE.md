@@ -1,41 +1,100 @@
 # Database Setup & OLAP Configuration Guide
 
-**Purpose**: Reference document for developing BMW OLAP schema and queries in a separate AI chat session.  
-**Audience**: AI assistant developing Phase 3+ (database schema, OLAP queries, data pipeline)  
-**Status**: Temporary - for effective knowledge transfer between chat sessions
+**Purpose**: Complete reference for BMW OLAP implementation with PostgreSQL (ROLAP) vs DuckDB (Columnar).  
+**Audience**: Developers implementing Phase 3+ (schema setup, data loading, OLAP queries)  
+**Data Source**: BMW sales dataset (bmw.csv) - 10,781 records with production year metadata
 
 ---
 
 ## Table of Contents
 1. [Overview](#overview)
-2. [PostgreSQL Configuration](#postgresql-configuration)
-3. [DuckDB Configuration](#duckdb-configuration)
-4. [Architecture & Data Flow](#architecture--data-flow)
-5. [OLAP Requirements](#olap-requirements)
-6. [Schema Design Guidelines](#schema-design-guidelines)
-7. [Development Workflow](#development-workflow)
-8. [Integration with Python Backend](#integration-with-python-backend)
+2. [Star Schema Design](#star-schema-design)
+3. [PostgreSQL Configuration](#postgresql-configuration)
+4. [DuckDB Configuration](#duckdb-configuration)
+5. [Data Loading Pipeline](#data-loading-pipeline)
+6. [Python Integration](#python-integration)
+7. [OLAP Query Framework](#olap-query-framework)
+8. [Docker Deployment](#docker-deployment)
 
 ---
 
 ## Overview
 
-### Project Context
-- **Project**: BMW Sales OLAP & Data Mining Comparison
-- **Purpose**: Compare traditional RDBMS (PostgreSQL) vs columnar analytics engine (DuckDB)
-- **Data Source**: BMW sales dataset (bmw.csv)
-- **Comparison Focus**: Query performance, execution time, result accuracy
+### Project Architecture
+- **Objective**: Build a comparative OLAP system demonstrating ROLAP (PostgreSQL) vs Columnar (DuckDB) approaches
+- **Frontend**: PHP web application for vehicle search/filtering + OLAP query builder
+- **Backend**: Python wrappers for both database engines with unified query interface
+- **Data**: BMW vehicle sales (10,781 records) with multiple dimensions
+- **Comparison**: Performance (query time), result accuracy, and analytics capability
 
 ### Database Roles
 
-| Aspect | PostgreSQL | DuckDB |
-|--------|-----------|---------|
-| **Type** | Traditional RDBMS | Columnar Analytics Engine |
+| Aspect | PostgreSQL (ROLAP) | DuckDB (Columnar) |
+|--------|------------------|-----------------|
+| **Type** | Traditional relational RDBMS | Columnar analytics engine |
 | **Storage** | Persistent volume (`postgres_data/`) | File-based (`/var/www/db/olap.duckdb`) |
-| **Purpose** | Production OLAP DB, normalized schema | Analytical queries, comparison baseline |
-| **Data Sync** | Source of truth | Replicated from PostgreSQL |
-| **Query Pattern** | Normalized joins, traditional SQL | Columnar aggregations, OLAP-optimized |
-| **Access** | TCP/5432 (internal network) | Python DuckDB library (in-process) |
+| **Purpose** | Source of truth, primary OLAP DB | Replication target for comparison |
+| **Data Sync** | Loads from bmw.csv | Synced from PostgreSQL after init |
+| **Query Pattern** | Joined row-oriented queries | Columnar aggregations |
+| **Web App Use** | Comparison mode only | Primary search/filtering |
+| **Access** | TCP/5432 (Docker network) | File I/O via Python (in-process) |
+
+---
+
+## Star Schema Design
+
+### Why Star Schema with Separate Dimensions?
+
+**Principle**: Each CSV column maps to either a **dimension** or a **measure**
+
+```
+CSV columns:     Mapping:
+model       →    dim_model (PK: model_id)
+year        →    dim_time (PK: time_id) + decade calc
+fuelType    →    dim_fuel_type (PK: fuel_type_id)
+transmission →   dim_transmission (PK: transmission_id)
+engineSize  →    dim_engine (PK: engine_id)
+price       →    fact_sales (measure)
+tax         →    fact_sales (measure)
+mileage     →    fact_sales (measure)
+mpg         →    fact_sales (measure)
+```
+
+### Advantage for Web Application
+
+**Separate dimensions enable dynamic filtering** (Slicing & Dicing):
+
+```javascript
+// User selects: Diesel + Automatic + 1.5L engine (should also be an option to select multiple values of one dimension)
+User Interface:
+┌─ Fuel Type ─┐  ┌─ Transmission ─┐  ┌─ Engine ────┐
+│ □ Diesel    │  │ □ Automatic    │  │ □ 1.5L      │
+│ □ Petrol    │  │ □ Manual       │  │ □ 2.0L      │
+│ ☑ Diesel    │  │ ☑ Automatic    │  │ ☑ 1.5L      │
+└─────────────┘  └────────────────┘  └─────────────┘
+
+Python Query Builder:
+→ Builds WHERE clause dynamically
+→ No SQL hardcoding needed
+→ Filters apply independently (OR/AND logic)
+```
+
+### Complete Star Schema (ETL-Ready)
+
+```sql
+-- Dimension Tables (5 total)
+dim_model           (24 records)     - BMW models (3 Series, 5 Series, etc.)
+dim_time            (25 records)     - Production years (1996-2020) + decade
+dim_fuel_type       (5 records)      - Diesel, Petrol, Hybrid, Electric, Other
+dim_transmission    (3 records)      - Automatic, Manual, Semi-Auto
+dim_engine          (17 records)     - Engine sizes (0.6L, 1.5L, 2.0L, 3.0L, etc.)
+
+-- Fact Table (1 fact)
+fact_sales          (10,781 records) - One row per vehicle sale
+```
+
+### File Location
+> **`db/schema.sql`** - DDL for all tables + indexes
 
 ---
 
@@ -53,151 +112,121 @@
 ### Docker Compose Service
 
 ```yaml
-postgres:
-  image: postgres:15-alpine
-  container_name: bmw_postgres_db
-  restart: unless-stopped
-  ports:
-    - "5432:5432"
-  environment:
-    POSTGRES_DB: bmw_olap
-    POSTGRES_USER: bmw_user
-    POSTGRES_PASSWORD: bmw_password
-    TZ: Europe/Prague
-  volumes:
-    - postgres_data:/var/lib/postgresql/data
-    - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql
-    - ./docker/postgres/load_data.sql:/docker-entrypoint-initdb.d/02-load_data.sql
-    - ./project/bmw.csv:/tmp/bmw.csv
-  networks:
-    - bmw_network
-  healthcheck:
-    test: ["CMD-SHELL", "pg_isready -U bmw_user -d bmw_olap"]
-    interval: 10s
-    timeout: 5s
-    retries: 5
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: bmw_postgres_db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: bmw_olap
+      POSTGRES_USER: bmw_user
+      POSTGRES_PASSWORD: bmw_password
+      TZ: Europe/Prague
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./docker/postgres/load_data.sql:/docker-entrypoint-initdb.d/02-load_data.sql
+      - ./db:/tmp/db  # Schema file accessible in container
+      - ./project/bmw.csv:/tmp/bmw.csv
+    networks:
+      - bmw_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bmw_user -d bmw_olap"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 ```
 
-### Initialization Process
+### Initialization Process (Two-Phase)
 
-**Phase**: Automatic on container startup
+**Phase 1: Schema Creation** (`docker/postgres/init.sql`)
+```sql
+-- Read and execute db/schema.sql
+\i /tmp/db/schema.sql
 
-1. **Schema Initialization** (`01-init.sql`):
-   - Creates dimension tables (dim_model, dim_time, dim_version)
-   - Creates fact table (fact_sales)
-   - Creates indexes for performance
-   - Grants permissions to `bmw_user`
+-- Create any views or helper functions
+-- Grant permissions
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO bmw_user;
+```
 
-2. **Data Loading** (`02-load_data.sql`):
-   - Loads BMW CSV data from `/tmp/bmw.csv`
-   - Uses COPY command for bulk insert (fast)
-   - Verifies row counts
-   - Creates statistics for query optimizer
+**Phase 2: Data Loading** (`docker/postgres/load_data.sql`)
+```sql
+-- Load dimension tables from CSV
+-- Populate fact_sales with processed CSV data
+-- Build indexes
+-- Create query statistics
+```
+
+**Execution Order**: 
+`01-init.sql` (schema) → `02-load_data.sql` (data) → Container ready
+
+### Schema Structure (Star Schema - 5 Dimensions + 1 Fact)
+
+```
+┌─ DIMENSIONS ─────────────────────┐
+│  dim_model          (24 records)  │  ← BMW models
+│  dim_time           (25 records)  │  ← Production years
+│  dim_fuel_type      (5 records)   │  ← Fuel modes
+│  dim_transmission   (3 records)   │  ← Gears
+│  dim_engine         (17 records)  │  ← Engine sizes
+└──────────────────────────────────┘
+         ↓ (all foreign keys)
+┌─ FACT ──────────────────────────┐
+│  fact_sales    (10,781 records)  │  ← Sales transactions
+└──────────────────────────────────┘
+```
 
 ### Python Connection Example
 
 ```python
 import psycopg2
-from psycopg2 import sql
+import psycopg2.extras
 
-# Connection
-conn = psycopg2.connect(
-    host='postgres',
-    port=5432,
-    database='bmw_olap',
-    user='bmw_user',
-    password='bmw_password'
-)
+class PostgreSQLOLAP:
+    def __init__(self, host='postgres', port=5432, db='bmw_olap', 
+                 user='bmw_user', password='bmw_password'):
+        self.conn = psycopg2.connect(
+            host=host,
+            port=port,
+            database=db,
+            user=user,
+            password=password
+        )
+    
+    def execute_query(self, query: str):
+        """Execute query and return results as list of dicts"""
+        cursor = self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cursor.execute(query)
+        return cursor.fetchall()
+    
+    def close(self):
+        self.conn.close()
 
-cursor = conn.cursor()
-
-# Query example
-cursor.execute("SELECT model_name, COUNT(*) FROM fact_sales fs JOIN dim_model dm ON fs.model_id = dm.model_id GROUP BY model_name")
-results = cursor.fetchall()
-
-cursor.close()
-conn.close()
+# Usage
+pg_olap = PostgreSQLOLAP()
+results = pg_olap.execute_query("""
+    SELECT dm.model_name, COUNT(*) as sales_count, AVG(fs.price) as avg_price
+    FROM fact_sales fs
+    JOIN dim_model dm ON fs.model_id = dm.model_id
+    WHERE fs.fuel_type_id = 1  -- Diesel
+    GROUP BY dm.model_name
+    ORDER BY sales_count DESC
+""")
 ```
 
-### PHP Connection Example
+### Quick Testing
 
-```php
-<?php
-$conn = pg_connect("host=" . getenv('DB_HOST') . 
-                   " port=5432 dbname=bmw_olap user=bmw_user password=bmw_password");
-
-if (!$conn) {
-    die("PostgreSQL connection failed");
-}
-
-$result = pg_query($conn, "SELECT COUNT(*) FROM fact_sales");
-$row = pg_fetch_row($result);
-echo "Total sales records: " . $row[0];
-
-pg_close($conn);
-?>
-```
-
-### Schema Structure (Typical Star Schema)
-
-```
-dim_model
-├── model_id (PK)
-├── model_name
-├── manufacturer
-└── created_at
-
-dim_time
-├── time_id (PK)
-├── year
-├── quarter
-├── month
-└── created_at
-
-dim_version
-├── version_id (PK)
-├── generation
-├── engine_type
-├── fuel_type
-├── transmission
-└── created_at
-
-fact_sales (fact table)
-├── sale_id (PK)
-├── model_id (FK → dim_model)
-├── time_id (FK → dim_time)
-├── version_id (FK → dim_version)
-├── price
-├── quantity
-├── mpg
-├── horsepower
-└── created_at
-```
-
-### Querying PostgreSQL
-
-**CLI Access**:
 ```bash
+# Access PostgreSQL CLI
 docker exec -it bmw_postgres_db psql -U bmw_user -d bmw_olap
-```
 
-**Common Commands**:
-```sql
--- List tables
-\dt
-
--- Show table structure
-\d fact_sales
-
--- Query with joins
-SELECT dm.model_name, SUM(fs.quantity) as total_sales
-FROM fact_sales fs
-JOIN dim_model dm ON fs.model_id = dm.model_id
-GROUP BY dm.model_name
-ORDER BY total_sales DESC;
-
--- Check row count
+# Common queries
+\dt                          # List all tables
+\d fact_sales                # Show schema
 SELECT COUNT(*) FROM fact_sales;
+SELECT COUNT(DISTINCT model_id) FROM fact_sales;
 ```
 
 ---
@@ -206,223 +235,228 @@ SELECT COUNT(*) FROM fact_sales;
 
 ### Connection Details
 
-**File Path**: `/var/www/db/olap.duckdb` (mounted volume in container)  
-**Access**: Python DuckDB library (in-process, no network)  
-**Type**: File-based columnar database  
-**Persistence**: Automatic on disk
+**File Path**: `/var/www/db/olap.duckdb` (mounted volume in Docker container)  
+**Access**: Python DuckDB library (in-process, zero network overhead)  
+**Type**: File-based columnar database (OLAP-optimized)  
+**Persistence**: Automatic disk writes after each operation
+**Primary Use**: Web application search/filtering (not comparison mode)
 
 ### Python Connection Example
 
 ```python
 import duckdb
+import pandas as pd
 
-# Connection (file-based)
-conn = duckdb.connect('/var/www/db/olap.duckdb')
+class DuckDBANALYTICS:
+    def __init__(self, db_path='/var/www/db/olap.duckdb'):
+        self.conn = duckdb.connect(db_path)
+    
+    def execute_query(self, query: str) -> pd.DataFrame:
+        """Execute query and return results as DataFrame"""
+        return self.conn.execute(query).fetchdf()
+    
+    def execute_fetch(self, query: str):
+        """Execute query and return raw results"""
+        return self.conn.execute(query).fetchall()
+    
+    def close(self):
+        self.conn.close()
 
-# Or in-memory (for testing)
-# conn = duckdb.connect(':memory:')
-
-# Query
-result = conn.execute("""
-    SELECT model_name, COUNT(*) as sales_count
-    FROM fact_sales
-    GROUP BY model_name
-    ORDER BY sales_count DESC
-""").fetchall()
-
-# Get column names
-columns = [desc[0] for desc in conn.description]
-
-conn.close()
+# Usage (for web search)
+duck = DuckDBANALYTICS()
+results = duck.execute_query("""
+    SELECT 
+        dm.model_name,
+        dft.fuel_type_name,
+        dt.production_year,
+        COUNT(*) as sales_count,
+        AVG(fs.price) as avg_price,
+        MIN(fs.price) as min_price,
+        MAX(fs.price) as max_price
+    FROM fact_sales fs
+    JOIN dim_model dm ON fs.model_id = dm.model_id
+    JOIN dim_fuel_type dft ON fs.fuel_type_id = dft.fuel_type_id
+    JOIN dim_time dt ON fs.time_id = dt.time_id
+    WHERE dft.fuel_type_name = 'Diesel'
+    GROUP BY dm.model_name, dft.fuel_type_name, dt.production_year
+    ORDER BY avg_price DESC
+""")
+print(results)
 ```
 
-### Setup Process (Python Backend Responsibility)
+### Data Synchronization (PostgreSQL → DuckDB)
 
-**When**: Phase 3 (database population)
+**Triggered**: Upon first startup (Phase 3) via Python script
 
-**Workflow**:
-1. Query PostgreSQL for all data
-2. Create DuckDB tables with same schema
-3. Populate DuckDB from PostgreSQL results
-4. Verify data equivalence (row counts, checksums)
-5. Both databases ready for OLAP queries
-
-**Example Script**:
+**Process**:
 ```python
 import psycopg2
 import duckdb
+import pandas as pd
 
-# Step 1: Connect to both databases
-pg_conn = psycopg2.connect(host='postgres', database='bmw_olap', user='bmw_user', password='bmw_password')
-duck_conn = duckdb.connect('/var/www/db/olap.duckdb')
-
-# Step 2: Get PostgreSQL data
-pg_cursor = pg_conn.cursor()
-pg_cursor.execute("SELECT * FROM fact_sales")
-data = pg_cursor.fetchall()
-
-# Step 3: Create DuckDB table
-duck_conn.execute("""
-    CREATE TABLE fact_sales (
-        sale_id INTEGER,
-        model_id INTEGER,
-        time_id INTEGER,
-        version_id INTEGER,
-        price DECIMAL(12, 2),
-        quantity INTEGER,
-        mpg DECIMAL(5, 2),
-        horsepower INTEGER,
-        created_at TIMESTAMP
+def replicate_postgresql_to_duckdb():
+    """One-time sync: PostgreSQL → DuckDB"""
+    
+    # 1. Connect to both
+    pg_conn = psycopg2.connect(
+        host='postgres', database='bmw_olap', 
+        user='bmw_user', password='bmw_password'
     )
-""")
+    duck_conn = duckdb.connect('/var/www/db/olap.duckdb')
+    
+    # 2. Replicate each table from PostgreSQL
+    for table_name in ['dim_model', 'dim_time', 'dim_fuel_type', 
+                       'dim_transmission', 'dim_engine', 'fact_sales']:
+        
+        # Query PostgreSQL
+        df = pd.read_sql(f"SELECT * FROM {table_name}", pg_conn)
+        
+        # Write to DuckDB
+        duck_conn.register(table_name, df)
+        duck_conn.execute(f"CREATE TABLE {table_name}_tmp AS SELECT * FROM {table_name}")
+        duck_conn.execute(f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM {table_name}_tmp")
+    
+    # 3. Verify
+    pg_cursor = pg_conn.cursor()
+    pg_cursor.execute("SELECT COUNT(*) FROM fact_sales")
+    pg_count = pg_cursor.fetchone()[0]
+    
+    duck_count = duck_conn.execute("SELECT COUNT(*) FROM fact_sales").fetchone()[0]
+    
+    assert pg_count == duck_count, f"Row count mismatch: PG={pg_count}, Duck={duck_count}"
+    print(f"✓ Replication complete: {pg_count} records synced")
+    
+    pg_conn.close()
+    duck_conn.close()
 
-# Step 4: Insert data
-for row in data:
-    duck_conn.execute("INSERT INTO fact_sales VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", row)
-
-duck_conn.commit()
-pg_conn.close()
-duck_conn.close()
+# Run once at startup
+if __name__ == '__main__':
+    replicate_postgresql_to_duckdb()
 ```
 
-### Advantages for OLAP
+### Advantages for Search/Filtering
 
-- **Columnar Storage**: Efficient for aggregations (SUM, COUNT, AVG)
-- **Vector Operations**: Fast bulk processing
-- **In-Process**: No network overhead
-- **Automatic Indexing**: Adaptive indexing for queries
-- **Perfect for Comparisons**: Same queries on both engines for benchmarking
-
-### Query Example in OLAP Context
-
-```python
-import duckdb
-import time
-
-conn = duckdb.connect('/var/www/db/olap.duckdb')
-
-# Time measurement
-start = time.time()
-
-result = conn.execute("""
-    SELECT 
-        model_name,
-        year,
-        COUNT(*) as sales_count,
-        AVG(price) as avg_price,
-        SUM(quantity) as total_quantity
-    FROM fact_sales fs
-    JOIN dim_model dm ON fs.model_id = dm.model_id
-    JOIN dim_time dt ON fs.time_id = dt.time_id
-    WHERE year >= 2017 AND dt.fuel_type = 'Diesel'
-    GROUP BY model_name, year
-    ORDER BY year DESC, sales_count DESC
-""").fetchall()
-
-elapsed = time.time() - start
-
-print(f"DuckDB query took {elapsed*1000:.2f}ms")
-```
+- **Ultra-fast aggregations**: Columnar storage excels at SUM, COUNT, AVG
+- **In-process access**: No network latency (vs PostgreSQL TCP)
+- **Automatic indexing**: DuckDB adapts indexes to query patterns
+- **Perfect for dashboards**: Real-time interactive filtering
 
 ---
 
-## Architecture & Data Flow
+## Data Loading Pipeline
 
-### Complete Data Pipeline
-
-```
-bmw.csv (source file)
-    ↓
-1. Data Load (Phase 3)
-    ↓
-PostgreSQL (normalized star schema)
-    ↓
-2. Replication (Python)
-    ↓
-DuckDB (columnar copy)
-    ↓
-3. OLAP Queries (Phase 6)
-    ↓
-Python Backend (src/olap/olap_backend.py)
-    ├── Execute Query on PostgreSQL
-    ├── Execute Query on DuckDB
-    ├── Measure Timing (avg 3 runs)
-    ├── Compare Results
-    └── Return JSON
-    ↓
-4. Frontend Display (www/olap.php)
-    ↓
-Browser (results + timing comparison)
-```
-
-### Query Execution Flow
+### Complete ETL Flow
 
 ```
-User clicks "Run Query" (www/olap.php)
-    ↓
-POST to includes/olap_wrapper.php
-    ↓
-shell_exec("python src/olap/olap_backend.py query_id column_selections")
-    ↓
-Python Backend:
-    1. Parse query ID (SLICE_1, DICE_2, etc.)
-    2. Get selected columns from POST
-    3. Build dynamic SELECT clause
-    4. Execute on PostgreSQL (3 times, average)
-    5. Execute on DuckDB (3 times, average)
-    6. Compare results (should be identical)
-    7. Calculate speedup factor
-    ↓
-Return JSON {query, pg_time, duck_time, speedup, results}
-    ↓
-PHP displays in table with timing info
+┌─ SOURCE ─────────────────────────────────────┐
+│  bmw.csv (10,781 records)                     │
+│  mode, year, price, transmission, mileage,    │
+│  fuelType, tax, mpg, engineSize               │
+└──────────────────────────────────────────────┘
+           ↓
+┌─ POSTGRES INIT ──────────────────────────────┐
+│  01-init.sql                                  │
+│  • Creates dim_model (24)                     │
+│  • Creates dim_time (25)                      │
+│  • Creates dim_fuel_type (5)                  │
+│  • Creates dim_transmission (3)               │
+│  • Creates dim_engine (17)                    │
+│  • Creates fact_sales (empty)                 │
+└──────────────────────────────────────────────┘
+           ↓
+┌─ DATA LOAD ───────────────────────────────────┐
+│  02-load_data.sql                             │
+│  • COPY dim_* from CSV (lookup logic)         │
+│  • COPY fact_sales from CSV (with FK refs)   │
+│  • CREATE indexes on PK/FK/measures          │
+│  • ANALYZE for query optimization            │
+└──────────────────────────────────────────────┘
+           ↓
+┌─ DUCKDB SYNC ─────────────────────────────────┐
+│  sync_duckdb.py (Python)                      │
+│  • Query all tables from PostgreSQL           │
+│  • Create identical structure in DuckDB       │
+│  • Verify row counts match                    │
+│  • Both databases now ready                   │
+└──────────────────────────────────────────────┘
+           ↓
+┌─ APPLICATIONS ────────────────────────────────┐
+│  www/search.php → DuckDB (web search)        │
+│  www/compare.php → Both DBs (performance)    │
+│  Python wrappers for unified query interface │
+└──────────────────────────────────────────────┘
 ```
 
----
+### SQL Init Script Structure
 
-## OLAP Requirements
+**File**: `docker/postgres/init.sql`
+```sql
+-- 1. Set search path
+SET search_path TO public;
 
-### 9 Pre-Built Queries (From Existing Code)
+-- 2. Load schema from db/schema.sql
+\i /tmp/db/schema.sql
 
-**SLICE Queries** (1-dimensional filtering):
-1. Diesel vehicles in 2010s decade
-2. Premium petrol vehicles (price > 30k)
-3. [One more to be defined from existing code]
+-- 3. Seed dimension tables (minimal)
+INSERT INTO dim_fuel_type(fuel_type_name) VALUES
+  ('Diesel'), ('Petrol'), ('Hybrid'), ('Electric'), ('Other');
 
-**DICE Queries** (multi-dimensional filtering + ranking):
-1. Top 15 most expensive combinations (minimum 5 sales)
-2. Top 10 cheapest vehicles (minimum 10 sales)
-3. Best price/MPG ratio (calculated column, 2010 onwards)
+INSERT INTO dim_transmission(transmission_name) VALUES
+  ('Automatic'), ('Manual'), ('Semi-Auto');
 
-**DRILL-DOWN Queries** (hierarchical aggregation):
-1. Model-only aggregation (1 level)
-2. Model + Year (2 levels)
-3. Model + Year + Engine + Fuel (4 levels)
+-- 4. Grant permissions
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO bmw_user;
 
-### Query Characteristics
+-- 5. Verify
+SELECT COUNT(*) FROM dim_fuel_type;  -- Should be 5
+```
 
-- **No transactions needed** (read-only)
-- **Parameterized construction** (prevent SQL injection)
-- **Column selection** (dynamic SELECT clause via checkboxes)
-- **Consistent results** (both DBs must return identical data)
-- **Performance measurement** (millisecond precision)
+### Data Load Script Structure
 
-### Expected Columns (From BMW Dataset)
+**File**: `docker/postgres/load_data.sql`
+```sql
+-- Load dimensions from CSV with deduplication
+INSERT INTO dim_model(model_name)
+SELECT DISTINCT model FROM (
+  SELECT DISTINCT model FROM read_csv('/tmp/bmw.csv')
+) t
+ORDER BY model;
 
-**Dimensions**:
-- Model (e.g., 3 Series, 5 Series)
-- Year (2010-2023 range)
-- Generation (F30, G20, F32, etc.)
-- Engine Type (TwinScroll, TwinPower, N/A, S55, etc.)
-- Fuel Type (Diesel, Petrol, Hybrid, Electric)
-- Transmission (Manual, Automatic)
+-- Similar for dim_time (extract UNIQUE years + calculate decade)
+-- Similar for dim_engine (extract UNIQUE engine sizes)
 
-**Measures**:
-- Price (decimal)
-- Quantity (integer)
-- MPG (fuel efficiency)
-- Horsepower (integer)
-- Sales Count (aggregate)
+-- Load fact_sales with FK resolution
+INSERT INTO fact_sales(
+  model_id, time_id, fuel_type_id, transmission_id, engine_id,
+  price, tax, mileage, mpg
+)
+SELECT
+  dm.model_id,
+  dt.time_id,
+  dft.fuel_type_id,
+  dtr.transmission_id,
+  de.engine_id,
+  csv.price,
+  csv.tax,
+  csv.mileage,
+  csv.mpg
+FROM read_csv('/tmp/bmw.csv') csv
+JOIN dim_model dm ON csv.model = dm.model_name
+JOIN dim_time dt ON csv.year = dt.production_year
+JOIN dim_fuel_type dft ON csv.fuelType = dft.fuel_type_name
+JOIN dim_transmission dtr ON csv.transmission = dtr.transmission_name
+JOIN dim_engine de ON csv.engineSize = de.engine_size;
+
+-- Create indexes
+CREATE INDEX idx_fact_model ON fact_sales(model_id);
+CREATE INDEX idx_fact_time ON fact_sales(time_id);
+CREATE INDEX idx_fact_fuel ON fact_sales(fuel_type_id);
+CREATE INDEX idx_fact_transmission ON fact_sales(transmission_id);
+CREATE INDEX idx_fact_engine ON fact_sales(engine_id);
+
+-- Statistics for query planner
+ANALYZE;
+```
 
 ---
 
