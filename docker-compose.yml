@@ -18,8 +18,8 @@ services:
       - DB_NAME=bmw_olap
       - DB_USER=bmw_user
       - DB_PASS=bmw_password
-      - DUCKDB_PATH=/var/www/db/olap.duckdb
-      - CREDENTIALS_DB=/var/www/db/credentials.duckdb
+      - DUCKDB_PATH=/var/www/html/db/olap.duckdb
+      - CREDENTIALS_DB=/var/www/html/db/credentials.duckdb
     depends_on:
       - postgres
     networks:
@@ -41,11 +41,10 @@ services:
     networks:
       - bmw_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U bmw_user -d bmw_olap"]
+      test: [ "CMD-SHELL", "pg_isready -U bmw_user -d bmw_olap" ]
       interval: 10s
       timeout: 5s
       retries: 5
-
   # DuckDB service (optional - can also use file-based in web container)
   # Keeping file-based for simplicity - shared volume via web container
 

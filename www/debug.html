@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>OLAP Debug</title>
+    <style>
+        body {
+            font-family: Arial;
+            padding: 20px;
+        }
+
+        .test {
+            background: #f0f0f0;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+
+        button {
+            padding: 10px 20px;
+            cursor: pointer;
+        }
+
+        pre {
+            background: #000;
+            color: #0f0;
+            padding: 10px;
+            overflow-x: auto;
+            max-height: 300px;
+        }
+
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+        }
+
+        .success {
+            background: #90EE90;
+        }
+
+        .error {
+            background: #FFB6C6;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>OLAP API Debug</h1>
+
+    <div class="test">
+        <h2>Test 1: List Queries</h2>
+        <button onclick="testList()">Run</button>
+        <div id="test1" class="status"></div>
+    </div>
+
+    <div class="test">
+        <h2>Test 2: Execute Q1 (PostgreSQL)</h2>
+        <button onclick="testQ1()">Run</button>
+        <div id="test2" class="status"></div>
+        <pre id="test2output"></pre>
+    </div>
+
+    <div class="test">
+        <h2>Test 3: Execute Q1 (DuckDB)</h2>
+        <button onclick="testQ1Duck()">Run</button>
+        <div id="test3" class="status"></div>
+        <pre id="test3output"></pre>
+    </div>
+
+    <div class="test">
+        <h2>Test 4: Compare Q1</h2>
+        <button onclick="testCompare()">Run</button>
+        <div id="test4" class="status"></div>
+        <pre id="test4output"></pre>
+    </div>
+
+    <script>
+        function showStatus(elementId, message, isError = false) {
+            const el = document.getElementById(elementId);
+            el.className = isError ? 'status error' : 'status success';
+            el.textContent = message;
+        }
+
+        function showOutput(elementId, data) {
+            const el = document.getElementById(elementId);
+            el.textContent = JSON.stringify(data, null, 2);
+        }
+
+        function testList() {
+            console.log('Testing list...');
+            fetch('/api/olap.php?action=list')
+                .then(r => r.json())
+                .then(data => {
+                    const count = data.queries?.length || 0;
+                    showStatus('test1', `✓ Got ${count} queries`);
+                    console.log('List data:', data);
+                })
+                .catch(e => showStatus('test1', `✗ Error: ${e.message}`, true));
+        }
+
+        function testQ1() {
+            console.log('Testing Q1 on PostgreSQL...');
+            fetch('/api/olap.php?action=execute&query_id=q1&db=postgres')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        showStatus('test2', `✓ Success: ${data.execution_time_ms}ms, ${data.rows_returned} rows`);
+                        showOutput('test2output', data);
+                    } else {
+                        showStatus('test2', `✗ Failed: ${data.error || data.status}`, true);
+                        showOutput('test2output', data);
+                    }
+                })
+                .catch(e => showStatus('test2', `✗ Error: ${e.message}`, true));
+        }
+
+        function testQ1Duck() {
+            console.log('Testing Q1 on DuckDB...');
+            fetch('/api/olap.php?action=execute&query_id=q1&db=duckdb')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        showStatus('test3', `✓ Success: ${data.execution_time_ms}ms, ${data.rows_returned} rows`);
+                        showOutput('test3output', data);
+                    } else {
+                        showStatus('test3', `✗ Failed: ${data.error || data.status}`, true);
+                        showOutput('test3output', data);
+                    }
+                })
+                .catch(e => showStatus('test3', `✗ Error: ${e.message}`, true));
+        }
+
+        function testCompare() {
+            console.log('Testing Compare...');
+            fetch('/api/olap.php?action=compare&query_id=q1')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.comparison) {
+                        const pg = data.postgres?.execution_time_ms || 0;
+                        const duck = data.duckdb?.execution_time_ms || 0;
+                        showStatus('test4', `✓ Compare: PG ${pg}ms vs Duck ${duck}ms (${data.comparison.speedup_factor}x)`);
+                        showOutput('test4output', data);
+                    } else {
+                        showStatus('test4', `✗ Failed: ${data.error}`, true);
+                        showOutput('test4output', data);
+                    }
+                })
+                .catch(e => showStatus('test4', `✗ Error: ${e.message}`, true));
+        }
+
+        // Auto-run tests on load
+        window.onload = function () {
+            console.log('Page loaded, running auto-tests...');
+            testList();
+            setTimeout(() => testQ1(), 500);
+            setTimeout(() => testQ1Duck(), 1000);
+            setTimeout(() => testCompare(), 1500);
+        };
+    </script>
+</body>
+
+</html>
