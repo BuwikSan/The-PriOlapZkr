@@ -2,6 +2,7 @@
 """
 OLAP Backend - BMW Sales Analytics
 Supports both PostgreSQL and DuckDB with query timing and comparison
+Can use ADVANCED mode with GROUPING SETS, ROLLUP, CUBE (PostgreSQL only)
 """
 
 import json
@@ -13,15 +14,21 @@ import psycopg2
 import duckdb
 from psycopg2.extras import RealDictCursor
 
+# ============================================
+# CONFIGURATION - Switch advanced mode here
+# ============================================
+USE_ADVANCED_POSTGRES = False  # Set to True to use GROUPING SETS, ROLLUP, CUBE for PostgreSQL
+
 
 class OlapBackend:
     """OLAP query engine for BMW sales data"""
 
-    def __init__(self):
+    def __init__(self, use_advanced: bool = False):
         self.pg_conn = None
         self.duck_db = None
         self.pg_connected = False
         self.duck_connected = False
+        self.use_advanced = use_advanced or USE_ADVANCED_POSTGRES
 
     def connect_postgres(self) -> bool:
         """Connect to PostgreSQL database"""
@@ -43,16 +50,37 @@ class OlapBackend:
     def connect_duckdb(self, db_path: str = None) -> bool:
         """Connect to DuckDB database"""
         try:
-            # Use env var first, then default
+            # Use env var first, then default based on OS
             if db_path is None:
-                db_path = os.getenv('DUCKDB_PATH', '/var/www/html/db/olap.duckdb')
+                # Try multiple possible paths for Windows and Linux (in order of priority)
+                possible_paths = [
+                    os.getenv('DUCKDB_PATH'),  # Explicit env var
+                    os.path.join(os.path.dirname(__file__), '../../db/olap.duckdb'),  # Windows relative: src/olap/../../db
+                    '../../../db/olap.duckdb',  # From src/olap/ to project root
+                    'db/olap.duckdb',  # Relative to current working directory
+                    '/var/www/html/db/olap.duckdb',  # Linux in Docker
+                    '/var/www/db/olap.duckdb',  # Alternative Linux
+                ]
+
+                db_path = None
+                for path in possible_paths:
+                    if path and os.path.exists(path):
+                        db_path = path
+                        print(f"[DuckDB] Found database at: {os.path.abspath(path)}", file=sys.stderr)
+                        break
+
+                # If still not found, use the env default or a relative path
+                if not db_path:
+                    db_path = os.getenv('DUCKDB_PATH', 'db/olap.duckdb')
+                    print(f"[DuckDB] Using default path: {db_path}", file=sys.stderr)
 
             self.duck_db = duckdb.connect(db_path)
             self.duck_connected = True
+            print(f"[DuckDB] Connected successfully to: {db_path}", file=sys.stderr)
             return True
         except Exception as e:
             self.duck_connected = False
-            print(f"DuckDB Error: {e}", file=sys.stderr)
+            print(f"[DuckDB] Error: {e}", file=sys.stderr)
             return False
 
     def execute_pg_query(self, query: str) -> Tuple[List[Dict], float, int]:
@@ -80,6 +108,8 @@ class OlapBackend:
         """Execute query on DuckDB and return results with timing"""
         if not self.duck_connected:
             if not self.connect_duckdb():
+                # Silently return empty results if DuckDB not available
+                # (error already printed to stderr)
                 return [], 0.0, 0
 
         try:
@@ -446,6 +476,24 @@ class OlapBackend:
             self.pg_conn.close()
         if self.duck_db:
             self.duck_db.close()
+
+    def get_backend_mode(self) -> Dict[str, Any]:
+        """Get current backend configuration and mode"""
+        return {
+            'mode': 'advanced' if self.use_advanced else 'standard',
+            'use_advanced': self.use_advanced,
+            'backend_type': 'hybrid',
+            'postgresql_features': 'GROUPING SETS, ROLLUP, CUBE' if self.use_advanced else 'GROUP BY',
+            'duckdb_features': 'Columnar aggregations (always optimized)'
+        }
+
+    def switch_mode(self, use_advanced: bool):
+        """Switch between standard and advanced mode"""
+        self.use_advanced = use_advanced
+        if use_advanced:
+            print("🔄 Switched to Advanced Mode (GROUPING SETS, ROLLUP, CUBE)")
+        else:
+            print("🔄 Switched to Standard Mode (GROUP BY)")
 
 
 def main():

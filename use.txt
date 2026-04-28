@@ -1,1 +1,10 @@
+pro login:
 ssh -i $env:USERPROFILE\.ssh\id_ed25519 burymuru@192.168.50.144
+
+pro kopírování souboru do serveru:
+scp -i $env:USERPROFILE\.ssh\id_ed25519 odkud burymuru@192.168.50.144:kam
+př.:
+scp -i $env:USERPROFILE\.ssh\id_ed25519 c:\GitHub\The-PriOlapZkr\post-install-ubuntu.sh burymuru@192.168.50.144:/tmp/
+
+pro shutdown serveru přímo v linuxu:
+

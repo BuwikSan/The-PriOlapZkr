@@ -38,28 +38,27 @@ class Hills_cypher:
             print(f"ERROR: Matrix is not invertible mod {self.CA_LEN}: {e}")
             raise
 
-    def generate_new_set_of_keys(self):
+    def generate_new_set_of_keys(self, force=True):
         def matrix_generation(rounds):
             keys = []
             for _ in range(rounds):
                 keys.append(self._generate_key())
             return keys
 
-        if len(self.keys) > 0:
-            if input("Keys are already generated, want to rewrite them? Y/N: ") == "Y":
-                self.keys = matrix_generation(self.rounds)
-                self.inverse_keys = [self._inverse_key_matrix(key) for key in self.keys]
-            else:
-                print("Keys already generated, aborting key generation.")
+        if len(self.keys) > 0 and not force:
+            # Keys already exist and force is False, don't regenerate
+            return False
         else:
+            # Generate new keys
             self.keys = matrix_generation(self.rounds)
             self.inverse_keys = [self._inverse_key_matrix(key) for key in self.keys]
+            return True
 
 
     # formatting and encoding -------------------------------------------------------------------------------
     def _text_number_transformation(self, vectors):
         dict = encharactered_numbers if isinstance(vectors[0][0], str) else enumerated_characters
-        
+
         for i in range(len(vectors)):
             for j in range(len(vectors[i])):
                 vectors[i][j] = dict[vectors[i][j]]
@@ -94,7 +93,7 @@ class Hills_cypher:
             for vector in input_vectors:
                 new_vectors.append(cypher_operation(vector, key))
             return np.array(new_vectors)
-        
+
         for key in self.keys if not decypher else self.inverse_keys:
             vectors = cypher_round(vectors, key)
 
@@ -111,17 +110,23 @@ class Hills_cypher:
         return final_string_stream
 
     def cypher(self, text):
+        # Auto-generate keys if not already present
+        if len(self.keys) == 0:
+            self.generate_new_set_of_keys()
         vectors = self._text_preprocessing(text)
         return self._cyphering_logic(vectors)
 
     def decypher(self, text):
+        # Auto-generate keys if not already present
+        if len(self.keys) == 0:
+            self.generate_new_set_of_keys()
         vectors = self._text_preprocessing(text, decypher=True)
         return self._cyphering_logic(vectors, decypher=True)
 
 
 
 
-def main(): 
+def main():
     text = "V relačním modelu jsou data uložena v tabulkách, na které má jisté požadavky. Při splnění požadavků je tabulka označována jako normalizovaná. Pokud nejsou tyto požadavky splněny, jsou označovány jako nenormalizované a proces jejich převodu na tabulky se označuje jako normalizace. Při tomto procesu dochází k odstraňování nedostatků tabulek jako je redundance nebo možnost vzniku aktualizační anomálie, tj. nechtěného vedlejšího efektu operace nad databází, při kterém dojde ke ztrátě nebo nekonzistenci dat. Postup normalizace je rozdělen do několika kroků a po dokončení každého z nich se tabulka nachází v určité normální formě. V praxi se většinou normalizuje do třetí normální formy, vyšší normální formy je vcelku obtížné porušit a vyžadují relativně velké znalosti, stejně jako návrh databází takové velikosti, kde je možné je porušit."
     cypher_engine = Hills_cypher()
     cypher_engine.generate_new_set_of_keys()

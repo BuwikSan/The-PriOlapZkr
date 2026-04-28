@@ -85,8 +85,8 @@ include __DIR__ . '/../includes/olap_wrapper.php';
 
         <h4>Hvězdicové Schéma (Star Schema)</h4>
         <p>
-            <strong>Faktová Tabulka:</strong> <code><?php echo $schema['fact_table']; ?></code><br>
-            Obsahuje prodejní data se zahraniční klíči na dimenzionální tabulky.
+            <strong>Faktová Tabulka:</strong> <code>fact_sales</code> (10,566 prodejních záznamů)<br>
+            Centrální faktová tabulka obsahuje prodejní transakce BMW s referencemi na dimenzionální tabulky.
         </p>
 
         <h4>Dimenzionální Tabulky:</h4>
@@ -94,32 +94,48 @@ include __DIR__ . '/../includes/olap_wrapper.php';
             <thead>
                 <tr>
                     <th>Tabulka</th>
+                    <th>Primární Klíč</th>
                     <th>Sloupce</th>
-                    <th>Popis</th>
+                    <th>Počet Záznamů</th>
                 </tr>
             </thead>
             <tbody>
                 <tr>
                     <td><code>dim_model</code></td>
-                    <td>model_id, model_name, category</td>
-                    <td>BMW modely a kategorie</td>
+                    <td>model_id</td>
+                    <td>model_id, model_name</td>
+                    <td>25 modelů</td>
                 </tr>
                 <tr>
                     <td><code>dim_time</code></td>
-                    <td>time_id, date, month, quarter, year</td>
-                    <td>Časové dimenze</td>
+                    <td>time_id</td>
+                    <td>time_id, production_year, decade</td>
+                    <td>27 let</td>
                 </tr>
                 <tr>
-                    <td><code>dim_version</code></td>
-                    <td>version_id, version_name, generation</td>
-                    <td>Verze a generace modelů</td>
+                    <td><code>dim_fuel_type</code></td>
+                    <td>fuel_type_id</td>
+                    <td>fuel_type_id, fuel_type_name</td>
+                    <td>5 typů paliva</td>
+                </tr>
+                <tr>
+                    <td><code>dim_transmission</code></td>
+                    <td>transmission_id</td>
+                    <td>transmission_id, transmission_name</td>
+                    <td>5 typů převodovky</td>
+                </tr>
+                <tr>
+                    <td><code>dim_engine</code></td>
+                    <td>engine_id</td>
+                    <td>engine_id, engine_size</td>
+                    <td>18 velikostí motorů</td>
                 </tr>
             </tbody>
         </table>
 
-        <h4>Faktová Tabulka Sloupce</h4>
+        <h4>Faktová Tabulka - Sloupce Měr</h4>
         <p style="color: var(--text-secondary);">
-            sales_id, model_id, time_id, version_id, quantity, revenue, unit_price
+            <code>sale_id</code> (PK) | <code>model_id</code> (FK) | <code>time_id</code> (FK) | <code>fuel_type_id</code> (FK) | <code>transmission_id</code> (FK) | <code>engine_id</code> (FK) | <code>price</code> | <code>tax</code> | <code>mileage</code> | <code>mpg</code>
         </p>
     </div>
 
@@ -142,6 +158,10 @@ function loadQuery() {
 function executeQuery() {
     const queryId = document.getElementById('querySelect').value;
     const compareCheckbox = document.getElementById('compareCheckbox').checked;
+
+    console.log('=== EXECUTE QUERY START ===');
+    console.log('queryId:', queryId);
+    console.log('compareCheckbox:', compareCheckbox);
 
     if (!queryId) {
         alert('Prosím, vyberte dotaz');
@@ -175,34 +195,44 @@ function executeQuery() {
         url += 'action=execute&query_id=' + encodeURIComponent(queryId) + '&db=postgres';
     }
 
+    // TEST: Use test endpoint for debugging - UNCOMMENT TO DEBUG
+    // url = '/api/test_response.php';
+
     console.log('Fetching:', url);
 
     // Fetch from PHP wrapper
     fetch(url)
         .then(response => {
             console.log('Response status:', response.status);
+            console.log('Response statusText:', response.statusText);
             if (!response.ok) {
-                throw new Error('HTTP ' + response.status);
+                throw new Error('HTTP ' + response.status + ' ' + response.statusText);
             }
             return response.text();
         })
         .then(text => {
-            console.log('Response text:', text.substring(0, 200));
+            console.log('Response text length:', text.length);
+            console.log('Response text (first 300 chars):', text.substring(0, 300));
             try {
                 const data = JSON.parse(text);
+                console.log('Parsed data keys:', Object.keys(data));
                 console.log('Parsed data:', data);
                 if (compareCheckbox) {
+                    console.log('Calling displayCompareResults');
                     displayCompareResults(data);
                 } else {
+                    console.log('Calling displaySingleResults');
                     displaySingleResults(data);
                 }
             } catch (e) {
                 console.error('JSON parse error:', e);
+                console.error('Error parsing:', text);
                 document.getElementById('pgStatus').textContent = '❌ Chyba: ' + e.message;
             }
         })
         .catch(error => {
             console.error('Fetch error:', error);
+            console.error('Error stack:', error.stack);
             document.getElementById('pgStatus').textContent = '❌ Chyba: ' + error.message;
             if (compareCheckbox) {
                 document.getElementById('duckStatus').textContent = '❌ Chyba: ' + error.message;
@@ -211,13 +241,26 @@ function executeQuery() {
 }
 
 function displaySingleResults(data) {
-    // Single database result
+    // Single database result - data is directly the response (not wrapped)
+    console.log('displaySingleResults data:', data);
+
+    // If response has 'error' key, show error
+    if (data.error) {
+        document.getElementById('pgStatus').textContent = '❌ Chyba: ' + data.error;
+        return;
+    }
+
     const pg = data;
     document.getElementById('pgTime').textContent = pg.execution_time_ms?.toFixed(2) || '-';
     document.getElementById('pgRows').textContent = pg.rows_returned || '0';
     document.getElementById('pgStatus').textContent =
         pg.rows_returned > 0 ? '✓ Úspěšně zpracováno' : '⚠️ Žádné výsledky';
-    document.getElementById('pgResultBox').innerHTML = formatResults(pg.results);
+
+    if (pg.results && pg.results.length > 0) {
+        document.getElementById('pgResultBox').innerHTML = formatResults(pg.results);
+    } else {
+        document.getElementById('pgResultBox').innerHTML = '<p>Žádné výsledky</p>';
+    }
 }
 
 function displayCompareResults(data) {

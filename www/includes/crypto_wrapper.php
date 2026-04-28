@@ -6,7 +6,7 @@
 
 class CryptoWrapper {
 
-    private static $pythonPath = '/usr/local/bin/python3';
+    private static $pythonPath = '/usr/bin/python3';
     private static $hillPath = '/var/www/src/crypto/HillC';
     private static $kyberPath = '/var/www/src/crypto/KyberC';
 

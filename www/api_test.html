@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>OLAP Frontend Test</title>
+    <style>
+        body {
+            font-family: Arial;
+            margin: 2rem;
+        }
+
+        .test {
+            background: #f0f0f0;
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 4px;
+        }
+
+        .success {
+            color: green;
+        }
+
+        .error {
+            color: red;
+        }
+
+        pre {
+            background: #222;
+            color: #0f0;
+            padding: 1rem;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>OLAP API Test</h1>
+
+    <div class="test">
+        <h3>Test 1: List Queries</h3>
+        <button onclick="testListQueries()">Run</button>
+        <pre id="test1-output"></pre>
+    </div>
+
+    <div class="test">
+        <h3>Test 2: Execute Q1 Query (PostgreSQL)</h3>
+        <button onclick="testExecuteQ1()">Run</button>
+        <pre id="test2-output"></pre>
+    </div>
+
+    <div class="test">
+        <h3>Test 3: Execute Q1 Query (DuckDB)</h3>
+        <button onclick="testExecuteQ1DuckDB()">Run</button>
+        <pre id="test3-output"></pre>
+    </div>
+
+    <div class="test">
+        <h3>Test 4: Compare Performance</h3>
+        <button onclick="testCompare()">Run</button>
+        <pre id="test4-output"></pre>
+    </div>
+
+    <script>
+        function setOutput(elementId, text, isError = false) {
+            const el = document.getElementById(elementId);
+            el.textContent = text;
+            el.className = isError ? 'error' : 'success';
+        }
+
+        function testListQueries() {
+            setOutput('test1-output', 'Loading...');
+            fetch('/api/olap.php?action=list')
+                .then(r => r.json())
+                .then(data => {
+                    setOutput('test1-output', JSON.stringify(data, null, 2));
+                })
+                .catch(e => setOutput('test1-output', 'ERROR: ' + e.message, true));
+        }
+
+        function testExecuteQ1() {
+            setOutput('test2-output', 'Loading...');
+            fetch('/api/olap.php?action=execute&query_id=q1&db=postgres')
+                .then(r => r.json())
+                .then(data => {
+                    setOutput('test2-output', JSON.stringify(data, null, 2));
+                })
+                .catch(e => setOutput('test2-output', 'ERROR: ' + e.message, true));
+        }
+
+        function testExecuteQ1DuckDB() {
+            setOutput('test3-output', 'Loading...');
+            fetch('/api/olap.php?action=execute&query_id=q1&db=duckdb')
+                .then(r => r.json())
+                .then(data => {
+                    setOutput('test3-output', JSON.stringify(data, null, 2));
+                })
+                .catch(e => setOutput('test3-output', 'ERROR: ' + e.message, true));
+        }
+
+        function testCompare() {
+            setOutput('test4-output', 'Loading...');
+            fetch('/api/olap.php?action=compare&query_id=q1')
+                .then(r => r.json())
+                .then(data => {
+                    setOutput('test4-output', JSON.stringify(data, null, 2));
+                })
+                .catch(e => setOutput('test4-output', 'ERROR: ' + e.message, true));
+        }
+    </script>
+</body>
+
+</html>

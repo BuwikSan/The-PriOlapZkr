@@ -6,13 +6,40 @@
 
 class OlapWrapper {
 
-    private static $pythonPath = '/usr/bin/python3';
-    private static $backendScript = '/var/www/src/olap/olap_backend.py';
+    private static $pythonPath = null;
+    private static $backendScript = null;
+
+    /**
+     * Initialize paths based on OS
+     */
+    private static function initPaths() {
+        if (self::$pythonPath !== null) return;
+
+        $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+
+        if ($isWindows) {
+            // Windows paths
+            self::$pythonPath = 'python';  // Use python from PATH
+            // Check if backend is in the current directory or parent
+            if (file_exists(__DIR__ . '/../../src/olap/olap_backend.py')) {
+                self::$backendScript = __DIR__ . '/../../src/olap/olap_backend.py';
+            } elseif (file_exists(__DIR__ . '/../../../src/olap/olap_backend.py')) {
+                self::$backendScript = __DIR__ . '/../../../src/olap/olap_backend.py';
+            } else {
+                self::$backendScript = 'src/olap/olap_backend.py';
+            }
+        } else {
+            // Linux paths
+            self::$pythonPath = '/usr/bin/python3';
+            self::$backendScript = '/var/www/src/olap/olap_backend.py';
+        }
+    }
 
     /**
      * Get list of available OLAP queries from Python backend
      */
     public static function getAvailableQueries() {
+        self::initPaths();
         $result = self::callBackend('list_queries');
         return $result ?? self::getDefaultQueries();
     }
@@ -38,6 +65,7 @@ class OlapWrapper {
      * Execute specific OLAP query
      */
     public static function executeQuery($queryId, $database = 'postgres') {
+        self::initPaths();
         $result = self::callBackend('execute_query', [$queryId, $database]);
 
         if ($result === null) {
@@ -51,6 +79,7 @@ class OlapWrapper {
      * Compare query performance between PostgreSQL and DuckDB
      */
     public static function comparePerformance($queryId) {
+        self::initPaths();
         $result = self::callBackend('compare', [$queryId]);
 
         if ($result === null) {
@@ -98,6 +127,9 @@ class OlapWrapper {
      * Call Python backend script
      */
     private static function callBackend($action, $args = []) {
+        // Initialize paths if needed
+        self::initPaths();
+
         // Build command
         $cmd = escapeshellcmd(self::$pythonPath) . ' ' . escapeshellarg(self::$backendScript) . ' ' . escapeshellarg($action);
 
@@ -105,8 +137,14 @@ class OlapWrapper {
             $cmd .= ' ' . escapeshellarg($arg);
         }
 
-        // Add error redirection
-        $cmd .= ' 2>&1';
+        // Redirect stderr to null to avoid polluting stdout with debug messages
+        // This ensures only JSON is returned to PHP
+        $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+        if ($isWindows) {
+            $cmd .= ' 2>nul';
+        } else {
+            $cmd .= ' 2>/dev/null';
+        }
 
         // Execute
         $output = shell_exec($cmd);
@@ -146,6 +184,7 @@ class OlapWrapper {
      * Check if backend is available
      */
     public static function isBackendAvailable() {
+        self::initPaths();
         $output = shell_exec(escapeshellcmd(self::$pythonPath) . ' --version 2>&1');
         return $output !== null && strpos($output, 'Python') !== false;
     }
