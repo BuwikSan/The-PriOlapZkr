@@ -118,6 +118,17 @@ class DataLoader:
             print("\n📥 Loading data into PostgreSQL...")
             cursor = self.pg_conn.cursor()
 
+            # TRUNCATE all tables to ensure clean load
+            print("  🗑️  Truncating existing data...")
+            cursor.execute("TRUNCATE TABLE fact_sales RESTART IDENTITY CASCADE")
+            cursor.execute("TRUNCATE TABLE dim_model RESTART IDENTITY CASCADE")
+            cursor.execute("TRUNCATE TABLE dim_fuel_type RESTART IDENTITY CASCADE")
+            cursor.execute("TRUNCATE TABLE dim_transmission RESTART IDENTITY CASCADE")
+            cursor.execute("TRUNCATE TABLE dim_engine RESTART IDENTITY CASCADE")
+            cursor.execute("TRUNCATE TABLE dim_time RESTART IDENTITY CASCADE")
+            self.pg_conn.commit()
+            print("  ✓ All tables truncated")
+
             # Load dimensions
             self._load_pg_dimensions(cursor)
 
@@ -182,6 +193,16 @@ class DataLoader:
         """Load data into DuckDB"""
         try:
             print("\n📥 Loading data into DuckDB...")
+
+            # TRUNCATE all tables to ensure clean load
+            print("  🗑️  Truncating existing data...")
+            self.duck_db.execute("DELETE FROM fact_sales")
+            self.duck_db.execute("DELETE FROM dim_model")
+            self.duck_db.execute("DELETE FROM dim_fuel_type")
+            self.duck_db.execute("DELETE FROM dim_transmission")
+            self.duck_db.execute("DELETE FROM dim_engine")
+            self.duck_db.execute("DELETE FROM dim_time")
+            print("  ✓ All tables cleared")
 
             # Load dimensions
             self._load_duck_dimensions()

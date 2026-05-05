@@ -1,0 +1,70 @@
+{
+  "timestamp": "2026-05-05T12:45:49.191061",
+  "sections": {
+    "data_integrity": {
+      "tests": [
+        {
+          "name": "Fact Table Row Count",
+          "postgresql": 10566,
+          "duckdb": 10566,
+          "match": true,
+          "status": "\u2713 PASS"
+        }
+      ]
+    },
+    "olap_queries": {
+      "queries": {
+        "q1": {
+          "error": "0"
+        },
+        "q2": {
+          "error": "0"
+        },
+        "q3": {
+          "error": "0"
+        },
+        "q4": {
+          "error": "0"
+        },
+        "q5": {
+          "error": "0"
+        },
+        "q6": {
+          "error": "0"
+        },
+        "q7": {
+          "error": "0"
+        },
+        "q8": {
+          "error": "0"
+        },
+        "q9": {
+          "error": "0"
+        }
+      },
+      "summary": {
+        "SLICE": 0,
+        "DICE": 0,
+        "DRILL-DOWN": 0
+      }
+    },
+    "performance": {
+      "query_times": {},
+      "benchmark": {
+        "postgresql_ms": 6.482124328613281,
+        "duckdb_ms": 5.336999893188477,
+        "speedup_factor": 1.2145633236542328,
+        "faster": "DuckDB"
+      }
+    },
+    "recommendations": {
+      "recommendations": [
+        "PostgreSQL is properly configured for ROLAP - use for transactional queries",
+        "DuckDB provides faster analytical queries - use for reporting/export",
+        "Both databases have identical data - good for validation",
+        "Consider materializing views for frequently-accessed aggregates",
+        "Add column indexes on foreign keys for better performance"
+      ]
+    }
+  }
+}

@@ -36,7 +36,7 @@ class OlapBackend:
             self.pg_conn = psycopg2.connect(
                 host=os.getenv('DB_HOST', 'postgres'),
                 port=os.getenv('DB_PORT', '5432'),
-                database=os.getenv('DB_NAME', 'bmw_sales'),
+                database=os.getenv('DB_NAME', 'bmw_olap'),
                 user=os.getenv('DB_USER', 'bmw_user'),
                 password=os.getenv('DB_PASS', 'bmw_password')
             )

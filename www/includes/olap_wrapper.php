@@ -103,7 +103,7 @@ class OlapWrapper {
                 ],
                 'duckdb' => [
                     'type' => 'Analytical Database',
-                    'path' => '/var/www/db/olap.duckdb',
+                    'path' => '/var/www/html/db/olap.duckdb',
                     'description' => 'Column-oriented embedded database, optimized for analytics'
                 ]
             ],
@@ -130,26 +130,24 @@ class OlapWrapper {
         // Initialize paths if needed
         self::initPaths();
 
+        // Build environment variables string for shell command
+        $env_vars = 'DB_HOST=postgres DB_PORT=5432 DB_NAME=bmw_olap DB_USER=bmw_user DB_PASS=bmw_password DUCKDB_PATH=/var/www/html/db/olap.duckdb';
+
         // Build command
-        $cmd = escapeshellcmd(self::$pythonPath) . ' ' . escapeshellarg(self::$backendScript) . ' ' . escapeshellarg($action);
+        $cmd = $env_vars . ' ' . self::$pythonPath . ' ' . escapeshellarg(self::$backendScript) . ' ' . escapeshellarg($action);
 
         foreach ($args as $arg) {
             $cmd .= ' ' . escapeshellarg($arg);
         }
 
-        // Redirect stderr to null to avoid polluting stdout with debug messages
-        // This ensures only JSON is returned to PHP
-        $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
-        if ($isWindows) {
-            $cmd .= ' 2>nul';
-        } else {
-            $cmd .= ' 2>/dev/null';
-        }
+        // Redirect stderr to /dev/null
+        $cmd .= ' 2>/dev/null';
 
         // Execute
         $output = shell_exec($cmd);
 
         if ($output === null) {
+            error_log("[OLAP] shell_exec returned null for action: $action");
             return null;
         }
 
